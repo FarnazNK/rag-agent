@@ -1,0 +1,59 @@
+[project]
+name = "rag-agent"
+version = "0.1.0"
+description = "Production-style LangGraph + RAG agent. Portfolio project for an AI Eval/Agent Infrastructure role."
+requires-python = ">=3.11"
+authors = [{ name = "Farnaz Nasehi" }]
+readme = "README.md"
+
+dependencies = [
+    "langgraph>=0.2.50",
+    "langchain-core>=0.3.20",
+    "langchain-anthropic>=0.3.0",
+    "langchain-openai>=0.2.10",
+    "langchain-community>=0.3.10",
+    "langchain-chroma>=0.1.4",
+    "chromadb>=0.5.20",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "tenacity>=9.0",
+    "structlog>=24.4",
+    "tiktoken>=0.8",
+    "rank-bm25>=0.2.2",
+    "typer>=0.13",
+    "rich>=13.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+tracing = [
+    "langsmith>=0.1.140",
+]
+
+[project.scripts]
+rag-agent = "rag_agent.cli:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
