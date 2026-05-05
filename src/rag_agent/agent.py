@@ -14,7 +14,6 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 
-from rag_agent.config import get_settings
 from rag_agent.graph import build_graph
 from rag_agent.observability import (
     configure_logging,
@@ -100,6 +99,24 @@ class Agent:
         # LangGraph returns a dict; revalidate as AgentState for type safety.
         final_dict = self._graph.invoke(initial)
         return AgentState.model_validate(final_dict)
+
+    async def astream_events(self, query: str, *, history: list[Any] | None = None):
+        """Async event stream for SSE / WebSocket clients.
+
+        Yields LangGraph events as they happen — node entries, LLM tokens, and
+        the final state. Each event is a dict with keys `event`, `name`, `data`.
+        See LangGraph's `astream_events` docs for the full event schema.
+
+        Why this lives on Agent rather than being read off the graph directly:
+        we want to wrap initial state construction and any future cross-cutting
+        concerns (auth, rate limiting, request scoping) in one place.
+        """
+        initial = AgentState(
+            query=query,
+            messages=[*(history or []), HumanMessage(content=query)],
+        )
+        async for event in self._graph.astream_events(initial, version="v2"):
+            yield event
 
     # ------------------------------------------------------------------
     # Introspection — useful for evals and debugging
