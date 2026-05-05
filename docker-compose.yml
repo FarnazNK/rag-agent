@@ -1,0 +1,64 @@
+# docker-compose for local development and CI smoke tests.
+#
+# `docker compose up api` starts the API on :8000 with persistent vectors
+# in the named volume `rag_chroma`. The `evals` service is a one-shot job
+# you run with `docker compose run --rm evals` after the API is healthy.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rag-agent:local
+    container_name: rag-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Anthropic + OpenAI keys are required at runtime. Source from a .env
+      # file in the project root (gitignored).
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}
+      - APP_LLM_MODEL=${APP_LLM_MODEL:-claude-sonnet-4-5}
+      # Optional: set LANGSMITH_API_KEY to enable tracing.
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+    volumes:
+      # Persist Chroma data across container restarts.
+      - rag_chroma:/data/chroma
+      # Mount the corpus read-only so iterating on docs doesn't require rebuild.
+      - ./data/sample_corpus_extended:/app/data/sample_corpus_extended:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # One-shot eval runner. Uses the same image as the API.
+  # Usage:  docker compose run --rm evals
+  evals:
+    image: rag-agent:local
+    container_name: rag-agent-evals
+    profiles: ["tools"]   # exclude from `docker compose up`; only run on demand
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?}
+    volumes:
+      - rag_chroma:/data/chroma
+      - ./data:/app/data:ro
+      - ./benchmarks/results:/app/benchmarks/results
+    command:
+      - python
+      - scripts/run_evals.py
+      - --dataset
+      - data/eval_datasets/hr_full.yaml
+      - --out
+      - benchmarks/results/last_run.json
+      - --fail-under
+      - "0.7"
+
+volumes:
+  rag_chroma:
