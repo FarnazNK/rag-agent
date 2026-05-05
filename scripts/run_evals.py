@@ -17,10 +17,10 @@ from rich.console import Console
 # Make the package importable when running as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from langchain_core.documents import Document  # noqa: E402
+from langchain_core.documents import Document
 
-from rag_agent.agent import Agent  # noqa: E402
-from rag_agent.evals import (  # noqa: E402
+from rag_agent.agent import Agent
+from rag_agent.evals import (
     ContainsScorer,
     ExactMatchScorer,
     LLMJudgeScorer,
@@ -52,7 +52,7 @@ def main(
         help="Path to the eval dataset YAML.",
     ),
     corpus: Path = typer.Option(
-        Path("data/sample_corpus"),
+        Path("data/sample_corpus_extended"),
         help="Corpus directory to index for retrieval.",
     ),
     tag: str = typer.Option("", help="Only run cases with this tag."),

@@ -7,7 +7,7 @@ that would otherwise show up as confusing downstream failures.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
@@ -62,7 +62,7 @@ class AgentState(BaseModel):
 
     # Trace metadata
     run_id: str = Field(default_factory=lambda: str(uuid4()))
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     error: str | None = None
 
     model_config = {"arbitrary_types_allowed": True}

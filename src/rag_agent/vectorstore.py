@@ -101,5 +101,5 @@ class ChromaStore:
         """Number of vectors currently in the collection."""
         try:
             return self._client._collection.count()  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001 — counting must never crash a query
+        except Exception:
             return -1

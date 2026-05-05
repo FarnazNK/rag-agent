@@ -16,8 +16,8 @@ from rich.console import Console
 from rich.table import Table
 
 from rag_agent.agent import Agent
-from rag_agent.evals.dataset import EvalCase, EvalDataset
-from rag_agent.evals.scorers import ScoreResult, Scorer
+from rag_agent.evals.dataset import EvalDataset
+from rag_agent.evals.scorers import Scorer, ScoreResult
 from rag_agent.observability import get_logger
 from rag_agent.schemas import AgentState
 
@@ -91,7 +91,7 @@ def run_evaluation(
         try:
             state: AgentState = agent.run(case.query)
             error = None
-        except Exception as exc:  # noqa: BLE001 — we want every case scored
+        except Exception as exc:
             # Synthesize an empty state so scorers don't crash on None.
             state = AgentState(query=case.query, error=str(exc))
             error = str(exc)
