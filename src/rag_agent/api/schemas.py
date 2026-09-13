@@ -1,62 +1,81 @@
-"""HTTP-facing schemas. Kept separate from the agent's internal schemas so
-internal refactors don't break API contracts."""
-
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+
+
+class CreateOrganizationRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+
+class CreateWorkspaceRequest(BaseModel):
+    organization_id: str
+    name: str = Field(min_length=2, max_length=120)
+
+
+class OrganizationOut(BaseModel):
+    id: str
+    name: str
+
+
+class WorkspaceOut(BaseModel):
+    id: str
+    organization_id: str
+    name: str
 
 
 class QueryRequest(BaseModel):
-    """POST /query and /stream payload."""
-
-    query: str = Field(..., min_length=1, max_length=2000)
-    # Reserved for future multi-turn support; not yet plumbed through.
-    session_id: str | None = None
+    workspace_id: str
+    query: str = Field(min_length=1, max_length=2000)
 
 
 class ChunkOut(BaseModel):
-    """Retrieved chunk as exposed externally."""
-
+    chunk_id: str
     source: str
     score: float
     snippet: str
 
 
-class GuardrailEventOut(BaseModel):
-    """A single guardrail decision, surfaced to clients for transparency."""
-
-    name: str
-    action: Literal["allow", "sanitize", "block"]
-    reason: str
-
-
 class QueryResponse(BaseModel):
-    """POST /query 200 body."""
-
     answer: str
-    route: str | None = None
-    iterations: int
     chunks: list[ChunkOut]
     latency_ms: float
-    run_id: str
-    guardrails: list[GuardrailEventOut] = Field(default_factory=list)
-    sanitized_query: str | None = None
+    request_id: str
+
+
+class IngestionResponse(BaseModel):
+    ingestion_id: str
+    document_id: str
+    status: str
+    progress: int
+    error: str | None = None
+
+
+class DocumentOut(BaseModel):
+    id: str
+    workspace_id: str
+    filename: str
+    status: str
+    created_at: datetime
 
 
 class HealthResponse(BaseModel):
-    """GET /health body."""
-
-    status: Literal["ok", "degraded"]
-    corpus_size: int
-    vector_count: int
-    tracing_enabled: bool
-
-
-class ErrorResponse(BaseModel):
-    """Standard error body — used for guardrail blocks and internal errors."""
-
-    error: str
-    detail: str | None = None
-    guardrail: str | None = None
+    status: Literal["ok"]
+    service: str

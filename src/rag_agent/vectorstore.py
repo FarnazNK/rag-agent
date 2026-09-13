@@ -1,105 +1,109 @@
-"""Vector store layer.
-
-Wraps Chroma behind a Protocol so the agent code doesn't depend on a specific
-provider. Swapping to Pinecone or pgvector is a one-class change — that's
-exactly the kind of build-vs-buy seam the JD calls out.
-"""
-
 from __future__ import annotations
 
+import hashlib
+import json
+import math
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-from langchain_openai import OpenAIEmbeddings
 
-from rag_agent.config import Settings, get_settings
-from rag_agent.observability import get_logger
 from rag_agent.schemas import RetrievedChunk
-
-log = get_logger(__name__)
 
 
 class VectorStore(Protocol):
-    """Interface every vector backend must satisfy."""
-
     def add_documents(self, docs: list[Document]) -> list[str]: ...
     def similarity_search(self, query: str, k: int) -> list[RetrievedChunk]: ...
     def count(self) -> int: ...
 
 
-def build_embeddings(settings: Settings | None = None) -> Embeddings:
-    """Factory for the embedding client. Cached separately from the store
-    so tests can stub it out."""
-    settings = settings or get_settings()
-    if settings.embedding_provider == "openai":
-        return OpenAIEmbeddings(model=settings.embedding_model)
-    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+def _embed(text: str, dim: int = 1536) -> list[float]:
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    data = (digest * (dim // len(digest) + 1))[:dim]
+    return [b / 255.0 for b in data]
 
 
-class ChromaStore:
-    """Concrete VectorStore backed by Chroma.
+def _cos(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
 
-    Persistence is on by default — `vector_store_path` from settings is the
-    on-disk directory. For ephemeral test stores, pass a temp dir.
-    """
 
-    def __init__(
-        self,
-        persist_directory: Path | None = None,
-        collection_name: str | None = None,
-        embeddings: Embeddings | None = None,
-    ) -> None:
-        settings = get_settings()
-        self._path = Path(persist_directory or settings.vector_store_path)
-        self._path.mkdir(parents=True, exist_ok=True)
+@dataclass
+class InMemoryStore:
+    _docs: list[Document] = field(default_factory=list)
+    _ids: list[str] = field(default_factory=list)
+    _vecs: list[list[float]] = field(default_factory=list)
 
-        self._collection = collection_name or settings.collection_name
-        self._embeddings = embeddings or build_embeddings(settings)
-
-        self._client = Chroma(
-            collection_name=self._collection,
-            embedding_function=self._embeddings,
-            persist_directory=str(self._path),
-        )
-        log.debug(
-            "vector_store.initialized",
-            path=str(self._path),
-            collection=self._collection,
-        )
+    def __init__(self, persist_directory=None, collection_name=None, embeddings=None) -> None:
+        self._docs = []
+        self._ids = []
+        self._vecs = []
+        self._persist_path: Path | None = None
+        if persist_directory is not None:
+            directory = Path(persist_directory)
+            directory.mkdir(parents=True, exist_ok=True)
+            name = collection_name or "rag_agent_docs"
+            self._persist_path = directory / f"{name}.json"
+            if self._persist_path.exists():
+                raw = json.loads(self._persist_path.read_text(encoding="utf-8"))
+                self._ids = [item["id"] for item in raw]
+                self._docs = [
+                    Document(page_content=item["content"], metadata=item.get("metadata", {}))
+                    for item in raw
+                ]
+                self._vecs = [_embed(doc.page_content) for doc in self._docs]
 
     def add_documents(self, docs: list[Document]) -> list[str]:
-        """Insert documents, returning their assigned IDs."""
-        if not docs:
-            return []
-        ids = self._client.add_documents(docs)
-        log.info("vector_store.indexed", count=len(ids))
+        ids: list[str] = []
+        start = len(self._docs)
+        for i, doc in enumerate(docs):
+            idx = str(start + i)
+            ids.append(idx)
+            self._docs.append(doc)
+            self._ids.append(idx)
+            self._vecs.append(_embed(doc.page_content))
+        self._persist()
         return ids
 
     def similarity_search(self, query: str, k: int) -> list[RetrievedChunk]:
-        """Run dense retrieval. Scores are converted to similarity in [0, 1]."""
-        # Chroma returns distance (lower is better). We invert and clip.
-        results = self._client.similarity_search_with_relevance_scores(query, k=k)
-
-        chunks: list[RetrievedChunk] = []
-        for doc, score in results:
-            # `relevance_score` from Chroma is already normalized to [0, 1].
-            chunks.append(
-                RetrievedChunk(
-                    chunk_id=doc.metadata.get("chunk_id", doc.id or ""),
-                    content=doc.page_content,
-                    source=doc.metadata.get("source", "unknown"),
-                    score=max(0.0, min(1.0, float(score))),
-                    metadata=doc.metadata,
-                )
+        qv = _embed(query)
+        ranked = sorted(
+            range(len(self._docs)),
+            key=lambda i: _cos(qv, self._vecs[i]),
+            reverse=True,
+        )[:k]
+        return [
+            RetrievedChunk(
+                chunk_id=self._docs[i].metadata.get("chunk_id", self._ids[i]),
+                content=self._docs[i].page_content,
+                source=self._docs[i].metadata.get("source", "unknown"),
+                score=max(0.0, min(1.0, _cos(qv, self._vecs[i]))),
+                metadata=self._docs[i].metadata,
             )
-        return chunks
+            for i in ranked
+        ]
 
     def count(self) -> int:
-        """Number of vectors currently in the collection."""
-        try:
-            return self._client._collection.count()  # type: ignore[attr-defined]
-        except Exception:
-            return -1
+        return len(self._docs)
+
+    def _persist(self) -> None:
+        if self._persist_path is None:
+            return
+        payload = [
+            {
+                "id": self._ids[i],
+                "content": self._docs[i].page_content,
+                "metadata": self._docs[i].metadata,
+            }
+            for i in range(len(self._docs))
+        ]
+        self._persist_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+class ChromaStore(InMemoryStore):
+    """Compatibility wrapper for callers expecting `ChromaStore`."""

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field
 
 
@@ -28,6 +28,7 @@ class EvalCase(BaseModel):
     expected_sources: list[str] = Field(default_factory=list)
     # Free-form criteria for the LLM judge. E.g. "cites the PTO policy doc".
     judge_criteria: str | None = None
+    expected_properties: list[str] = Field(default_factory=list)
     # Tags for filtering (e.g. "smoke", "regression", "safety").
     tags: list[str] = Field(default_factory=list)
     # Whether the agent should refuse. Tested by checking route=refuse.

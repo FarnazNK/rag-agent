@@ -23,9 +23,10 @@ htmlcov/
 
 # Project-specific
 .env
-data/chroma/
 eval_results.json
 eval_results*.json
+benchmarks/results/latest_eval.json
+test_api.db
 
 # IDE
 .vscode/

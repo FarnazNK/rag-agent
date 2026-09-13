@@ -14,6 +14,7 @@ The built-ins cover the cases the JD calls out explicitly:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -119,6 +120,97 @@ class RetrievalRecallScorer:
         passed = score >= self.pass_threshold
         rationale = f"retrieved {sorted(retrieved_sources)}, expected {case.expected_sources}"
         return ScoreResult(self.name, score, passed, rationale)
+
+
+class RetrievalPrecisionScorer:
+    name = "retrieval_precision"
+    pass_threshold = 0.6
+
+    def __call__(self, case: EvalCase, state: AgentState) -> ScoreResult:
+        if not case.expected_sources:
+            return ScoreResult(self.name, 1.0, True, "skipped (no expected_sources)")
+        retrieved = [c.source for c in state.chunks]
+        if not retrieved:
+            return ScoreResult(self.name, 0.0, False, "no retrieved chunks")
+        expected = set(case.expected_sources)
+        hits = sum(1 for source in retrieved if source in expected)
+        score = hits / len(retrieved)
+        return ScoreResult(
+            self.name, score, score >= self.pass_threshold, f"hits={hits}/{len(retrieved)}"
+        )
+
+
+class HitRateMRRScorer:
+    name = "hit_rate_mrr"
+    pass_threshold = 0.4
+
+    def __call__(self, case: EvalCase, state: AgentState) -> ScoreResult:
+        if not case.expected_sources:
+            return ScoreResult(self.name, 1.0, True, "skipped (no expected_sources)")
+        expected = set(case.expected_sources)
+        for i, chunk in enumerate(state.chunks, start=1):
+            if chunk.source in expected:
+                mrr = 1.0 / i
+                return ScoreResult(
+                    self.name, mrr, mrr >= self.pass_threshold, f"first_hit_rank={i}"
+                )
+        return ScoreResult(self.name, 0.0, False, "no hit")
+
+
+class GroundednessScorer:
+    name = "groundedness"
+    pass_threshold = 0.7
+
+    def __call__(self, case: EvalCase, state: AgentState) -> ScoreResult:
+        answer = (state.final_answer or "").lower()
+        if not answer:
+            return ScoreResult(self.name, 0.0, False, "empty answer")
+        context_tokens = set(re.findall(r"\w+", " ".join(c.content for c in state.chunks).lower()))
+        answer_tokens = [t for t in re.findall(r"\w+", answer) if len(t) > 3]
+        if not answer_tokens:
+            return ScoreResult(self.name, 0.0, False, "insufficient answer tokens")
+        overlap = sum(1 for token in answer_tokens if token in context_tokens)
+        score = overlap / len(answer_tokens)
+        return ScoreResult(
+            self.name,
+            score,
+            score >= self.pass_threshold,
+            f"overlap={overlap}/{len(answer_tokens)}",
+        )
+
+
+class CitationCorrectnessScorer:
+    name = "citation_correctness"
+    pass_threshold = 1.0
+
+    def __call__(self, case: EvalCase, state: AgentState) -> ScoreResult:
+        answer = state.final_answer or ""
+        citations = re.findall(r"\[source:\s*([^\]]+)\]", answer)
+        if not citations:
+            return ScoreResult(self.name, 1.0, True, "skipped (no citations)")
+        valid_sources = {chunk.source for chunk in state.chunks}
+        valid = sum(1 for c in citations if c.strip() in valid_sources)
+        score = valid / len(citations)
+        return ScoreResult(
+            self.name, score, score >= self.pass_threshold, f"valid={valid}/{len(citations)}"
+        )
+
+
+class HallucinationRateScorer:
+    name = "hallucination_rate"
+    pass_threshold = 0.2
+
+    def __call__(self, case: EvalCase, state: AgentState) -> ScoreResult:
+        answer = (state.final_answer or "").lower()
+        if not answer:
+            return ScoreResult(self.name, 1.0, True, "skipped (empty answer)")
+        bad_markers = ("definitely", "guaranteed", "always")
+        hits = sum(1 for marker in bad_markers if marker in answer)
+        rate = hits / len(bad_markers)
+        score = 1.0 - rate
+        return ScoreResult(
+            self.name, score, rate <= self.pass_threshold, f"hallucination_markers={hits}"
+        )
 
 
 # ---------------------------------------------------------------------------

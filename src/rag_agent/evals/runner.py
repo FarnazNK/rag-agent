@@ -8,6 +8,7 @@ non-zero exit on regression).
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -54,6 +55,8 @@ class EvalReport:
     pass_rate: float
     results: list[EvalResult]
     by_scorer: dict[str, float]  # scorer_name -> mean score across cases
+    p95_latency_s: float
+    token_usage: int
 
     def to_json(self) -> str:
         return json.dumps(
@@ -63,11 +66,17 @@ class EvalReport:
                 "passed": self.passed,
                 "failed": self.failed,
                 "pass_rate": self.pass_rate,
-                "by_scorer": self.by_scorer,
+                "by_scorer": {
+                    key: (None if isinstance(value, float) and math.isnan(value) else value)
+                    for key, value in self.by_scorer.items()
+                },
+                "p95_latency_s": self.p95_latency_s,
+                "token_usage": self.token_usage,
                 "results": [r.to_dict() for r in self.results],
             },
             indent=2,
             default=str,
+            allow_nan=False,
         )
 
     def write_json(self, path: Path | str) -> None:
@@ -136,6 +145,8 @@ def run_evaluation(
         pass_rate=passed_count / len(results) if results else 0.0,
         results=results,
         by_scorer=by_scorer,
+        p95_latency_s=_percentile([r.latency_s for r in results], 95),
+        token_usage=sum(len(r.answer.split()) for r in results),
     )
 
     if verbose:
@@ -165,3 +176,13 @@ def _print_report(console: Console, report: EvalReport) -> None:
     )
     for scorer_name, mean in report.by_scorer.items():
         console.print(f"  {scorer_name}: mean={mean:.2f}")
+    console.print(f"  p95_latency_s: {report.p95_latency_s:.2f}")
+    console.print(f"  token_usage: {report.token_usage}")
+
+
+def _percentile(values: list[float], percentile: int) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    rank = max(0, min(len(sorted_values) - 1, int((percentile / 100) * (len(sorted_values) - 1))))
+    return sorted_values[rank]

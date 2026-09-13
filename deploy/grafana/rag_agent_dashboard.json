@@ -1,0 +1,12 @@
+{
+  "title": "RAG Agent Overview",
+  "panels": [
+    {"title": "Request rate", "type": "timeseries", "targets": [{"expr": "sum(rate(rag_agent_requests_total[5m]))"}]},
+    {"title": "P95 latency", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.95, sum(rate(rag_agent_request_latency_seconds_bucket[5m])) by (le))"}]},
+    {"title": "Retrieval latency", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.95, sum(rate(rag_agent_retrieval_latency_seconds_bucket[5m])) by (le))"}]},
+    {"title": "Error rate", "type": "timeseries", "targets": [{"expr": "sum(rate(rag_agent_errors_total[5m]))"}]},
+    {"title": "Ingestion failures", "type": "timeseries", "targets": [{"expr": "increase(rag_agent_ingestion_failures_total[1h])"}]}
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

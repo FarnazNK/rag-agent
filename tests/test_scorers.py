@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from rag_agent.evals.dataset import EvalCase
 from rag_agent.evals.scorers import (
+    CitationCorrectnessScorer,
     ContainsScorer,
     ExactMatchScorer,
+    GroundednessScorer,
+    HallucinationRateScorer,
+    HitRateMRRScorer,
+    RetrievalPrecisionScorer,
     RetrievalRecallScorer,
 )
 from rag_agent.schemas import AgentState, RetrievedChunk
@@ -69,3 +74,36 @@ class TestExactMatchScorer:
         # Failed refusal — agent answered instead
         result = ExactMatchScorer()(case, _state(answer="here is the info", route="retrieve"))
         assert not result.passed
+
+
+def test_retrieval_precision_scorer():
+    case = EvalCase(case_id="c1", query="q", expected_sources=["a.md"])
+    result = RetrievalPrecisionScorer()(case, _state(sources=["a.md", "x.md"]))
+    assert result.score == 0.5
+
+
+def test_hit_rate_mrr_scorer():
+    case = EvalCase(case_id="c1", query="q", expected_sources=["b.md"])
+    result = HitRateMRRScorer()(case, _state(sources=["a.md", "b.md"]))
+    assert result.score == 0.5
+
+
+def test_groundedness_scorer():
+    case = EvalCase(case_id="c1", query="q")
+    state = _state(answer="policy says 15 pto days", sources=["a.md"])
+    state.chunks[0].content = "policy says 15 pto days for employees"
+    result = GroundednessScorer()(case, state)
+    assert result.passed
+
+
+def test_citation_correctness_scorer():
+    case = EvalCase(case_id="c1", query="q")
+    state = _state(answer="See [source: a.md]", sources=["a.md"])
+    result = CitationCorrectnessScorer()(case, state)
+    assert result.passed
+
+
+def test_hallucination_rate_scorer():
+    case = EvalCase(case_id="c1", query="q")
+    result = HallucinationRateScorer()(case, _state(answer="This is definitely always guaranteed"))
+    assert not result.passed

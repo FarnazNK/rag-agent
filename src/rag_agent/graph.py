@@ -6,9 +6,9 @@ isolation and easy to swap.
 
 Every node is `async def`. The nodes that call an LLM await the provider's
 native async client; the retrieve node awaits a thread-offloaded hybrid
-search. Nothing in a node body may block the event loop — under concurrent
-voice sessions a single blocking call stalls every other session sharing the
-worker, which shows up directly as p99 tail latency.
+search. Nothing in a node body may block the event loop — under concurrency
+a single blocking call stalls every other request sharing the worker, which
+shows up directly as p99 tail latency.
 
 A uniformly async graph also means `ainvoke`/`astream_events` never silently
 fall back to running a sync node in LangGraph's default thread pool, which

@@ -28,7 +28,7 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/home/app/.local/bin:${PATH}" \
-    APP_VECTOR_STORE_PATH=/data/chroma
+    APP_DATABASE_URL=postgresql://postgres@postgres:5432/rag_agent
 
 # Non-root user — never run prod containers as root.
 RUN useradd --create-home --shell /bin/bash app && \
@@ -42,6 +42,8 @@ COPY --from=builder /root/.local /home/app/.local
 COPY --chown=app:app src ./src
 COPY --chown=app:app data ./data
 COPY --chown=app:app scripts ./scripts
+COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app alembic.ini ./alembic.ini
 
 USER app
 

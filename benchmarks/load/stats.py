@@ -20,8 +20,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-import numpy as np
-
 
 @dataclass
 class LatencySummary:
@@ -62,20 +60,21 @@ def summarize(latencies_seconds: list[float]) -> LatencySummary:
             p99_reliable=False,
         )
 
-    arr = np.asarray(latencies_seconds, dtype=np.float64) * 1000.0
+    arr = sorted(v * 1000.0 for v in latencies_seconds)
 
     def pct(q: float) -> float:
-        return float(np.percentile(arr, q, method="lower"))
+        idx = int((q / 100) * (len(arr) - 1))
+        return float(arr[idx])
 
     return LatencySummary(
         count=len(arr),
-        mean_ms=float(arr.mean()),
+        mean_ms=float(sum(arr) / len(arr)),
         p50_ms=pct(50),
         p90_ms=pct(90),
         p95_ms=pct(95),
         p99_ms=pct(99),
-        min_ms=float(arr.min()),
-        max_ms=float(arr.max()),
+        min_ms=float(arr[0]),
+        max_ms=float(arr[-1]),
         # 100 samples => p99 is the single worst observation. Call it
         # unreliable below that rather than printing it as though it means
         # something.
@@ -83,14 +82,8 @@ def summarize(latencies_seconds: list[float]) -> LatencySummary:
     )
 
 
-def realtime_factor(compute_seconds: float, audio_seconds: float) -> float:
-    """Compute seconds per audio second.
-
-    RTF < 1 means the system transcribes faster than real time — the
-    threshold for whether a single stream can keep up at all. RTF is reported
-    per-stream; total throughput is a separate question answered by
-    audio-seconds/second across all concurrent streams.
-    """
-    if audio_seconds <= 0:
+def work_factor(compute_seconds: float, work_units: float) -> float:
+    """Compute seconds spent per unit of work."""
+    if work_units <= 0:
         return 0.0
-    return compute_seconds / audio_seconds
+    return compute_seconds / work_units

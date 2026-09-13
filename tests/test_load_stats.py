@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks" / "load"))
 
-from stats import realtime_factor, summarize
+from stats import summarize, work_factor
 
 
 def test_summarize_empty_is_safe():
@@ -85,10 +85,7 @@ def test_p99_reflects_definition_not_worst_case():
     assert s.max_ms == pytest.approx(5000.0), "max must show the outlier"
 
 
-def test_realtime_factor():
-    # 0.5s of compute for 2s of audio => RTF 0.25, four times faster than real time
-    assert realtime_factor(0.5, 2.0) == pytest.approx(0.25)
-    # slower than real time
-    assert realtime_factor(4.0, 2.0) == pytest.approx(2.0)
-    # guard against divide-by-zero on empty audio
-    assert realtime_factor(1.0, 0.0) == 0.0
+def test_work_factor():
+    assert work_factor(0.5, 2.0) == pytest.approx(0.25)
+    assert work_factor(4.0, 2.0) == pytest.approx(2.0)
+    assert work_factor(1.0, 0.0) == 0.0

@@ -21,9 +21,14 @@ from langchain_core.documents import Document
 
 from rag_agent.agent import Agent
 from rag_agent.evals import (
+    CitationCorrectnessScorer,
     ContainsScorer,
     ExactMatchScorer,
+    GroundednessScorer,
+    HallucinationRateScorer,
+    HitRateMRRScorer,
     LLMJudgeScorer,
+    RetrievalPrecisionScorer,
     RetrievalRecallScorer,
     load_dataset,
     run_evaluation,
@@ -62,6 +67,9 @@ def main(
         1.0,
         help="Exit non-zero if pass_rate is below this threshold. Default 1.0.",
     ),
+    min_retrieval_recall: float = typer.Option(0.7),
+    min_groundedness: float = typer.Option(0.7),
+    max_p95_latency_s: float = typer.Option(5.0),
 ) -> None:
     ds = load_dataset(dataset)
     if tag:
@@ -80,7 +88,12 @@ def main(
     scorers = [
         ExactMatchScorer(),
         ContainsScorer(),
+        RetrievalPrecisionScorer(),
         RetrievalRecallScorer(),
+        HitRateMRRScorer(),
+        GroundednessScorer(),
+        CitationCorrectnessScorer(),
+        HallucinationRateScorer(),
     ]
     if not no_judge:
         scorers.append(LLMJudgeScorer())
@@ -96,6 +109,15 @@ def main(
             f"[red]Pass rate {report.pass_rate:.0%} < threshold {fail_under:.0%} — "
             f"failing the run.[/red]"
         )
+        raise typer.Exit(code=1)
+    if report.by_scorer.get("retrieval_recall", 1.0) < min_retrieval_recall:
+        console.print("[red]retrieval_recall threshold failed[/red]")
+        raise typer.Exit(code=1)
+    if report.by_scorer.get("groundedness", 1.0) < min_groundedness:
+        console.print("[red]groundedness threshold failed[/red]")
+        raise typer.Exit(code=1)
+    if report.p95_latency_s > max_p95_latency_s:
+        console.print("[red]p95 latency threshold failed[/red]")
         raise typer.Exit(code=1)
 
 

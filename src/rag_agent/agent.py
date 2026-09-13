@@ -9,6 +9,7 @@ breaking callers.
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +104,12 @@ class Agent:
             messages=[*(history or []), HumanMessage(content=query)],
         )
         # LangGraph returns a dict; revalidate as AgentState for type safety.
-        final_dict = self._graph.invoke(initial)
+        try:
+            final_dict = self._graph.invoke(initial)
+        except TypeError as exc:
+            if "No synchronous function provided" not in str(exc):
+                raise
+            final_dict = _run_coroutine_sync(self._graph.ainvoke(initial))
         return AgentState.model_validate(final_dict)
 
     async def arun(
@@ -115,18 +121,15 @@ class Agent:
     ) -> AgentState:
         """Async full run. This is the entrypoint for the serving path.
 
-        `timeout` bounds the whole graph execution. It exists because a voice
-        session has a deadline that a text request doesn't: an answer that
-        arrives after the caller has already given up is pure cost. On expiry
+        `timeout` bounds the whole graph execution. It keeps slow provider
+        calls from holding resources indefinitely. On expiry
         the underlying graph task is cancelled and `asyncio.TimeoutError`
         propagates.
 
         Cancellation: `asyncio.wait_for` cancels the inner task, and because
         every node is a coroutine, the CancelledError lands at whichever await
         is currently in flight and unwinds the graph. That is what makes
-        barge-in possible — the caller just cancels the task holding this
-        coroutine and in-flight LLM work stops rather than running to
-        completion against a client that stopped listening.
+        the caller can cancel the task and in-flight LLM work is stopped.
         """
         initial = AgentState(
             query=query,
@@ -151,7 +154,7 @@ class Agent:
         return result.final_answer or ""
 
     async def astream_events(self, query: str, *, history: list[Any] | None = None):
-        """Async event stream for SSE / WebSocket clients.
+        """Async event stream for SSE clients.
 
         Yields LangGraph events as they happen — node entries, LLM tokens, and
         the final state. Each event is a dict with keys `event`, `name`, `data`.
@@ -176,3 +179,26 @@ class Agent:
     def graph(self) -> Any:
         """Expose the compiled graph for visualization / tracing."""
         return self._graph
+
+
+def _run_coroutine_sync(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result: dict[str, Any] = {}
+    error: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            result["value"] = asyncio.run(coro)
+        except BaseException as exc:  # pragma: no cover
+            error.append(exc)
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
+    return result["value"]

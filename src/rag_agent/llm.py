@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_anthropic import ChatAnthropic
+from langchain_core.language_models import FakeListChatModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -37,8 +38,17 @@ def build_llm(settings: Settings | None = None) -> BaseChatModel:
         return ChatOpenAI(
             model=settings.llm_model,
             temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
+            model_kwargs={"max_tokens": settings.llm_max_tokens},
             timeout=30,
+        )
+    if settings.llm_provider == "mock":
+        return FakeListChatModel(
+            responses=[
+                "retrieve",
+                "rewritten query",
+                '{"is_relevant": true, "confidence": 0.8, "rationale": "mock"}',
+                "Mock answer with [source: pto_policy.md]",
+            ]
         )
     raise ValueError(f"Unsupported LLM provider: {settings.llm_provider}")
 

@@ -13,22 +13,32 @@ The three pieces:
 from rag_agent.evals.dataset import EvalCase, EvalDataset, load_dataset
 from rag_agent.evals.runner import EvalReport, EvalResult, run_evaluation
 from rag_agent.evals.scorers import (
+    CitationCorrectnessScorer,
     ContainsScorer,
     ExactMatchScorer,
+    GroundednessScorer,
+    HallucinationRateScorer,
+    HitRateMRRScorer,
     LLMJudgeScorer,
+    RetrievalPrecisionScorer,
     RetrievalRecallScorer,
     Scorer,
     ScoreResult,
 )
 
 __all__ = [
+    "CitationCorrectnessScorer",
     "ContainsScorer",
     "EvalCase",
     "EvalDataset",
     "EvalReport",
     "EvalResult",
     "ExactMatchScorer",
+    "GroundednessScorer",
+    "HallucinationRateScorer",
+    "HitRateMRRScorer",
     "LLMJudgeScorer",
+    "RetrievalPrecisionScorer",
     "RetrievalRecallScorer",
     "ScoreResult",
     "Scorer",
