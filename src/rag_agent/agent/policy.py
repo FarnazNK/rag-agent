@@ -156,9 +156,7 @@ class ToolPolicy:
         prefix = max(matching_prefixes, key=len)
         for extra in args[len(prefix) :]:
             if extra.startswith("-"):
-                raise PolicyViolation(
-                    "Only repository paths may follow a verification command."
-                )
+                raise PolicyViolation("Only repository paths may follow a verification command.")
             self._validate_command_path(extra, repo_root)
 
         return args
