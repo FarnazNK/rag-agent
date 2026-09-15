@@ -31,7 +31,6 @@ DEFAULT_COMMAND_ALLOWLIST: tuple[tuple[str, ...], ...] = (
 DEFAULT_DENIED_PARTS = frozenset(
     {
         ".aws",
-        ".env",
         ".git",
         ".gnupg",
         ".ssh",
@@ -71,6 +70,8 @@ class ToolPolicy:
         lowered_parts = {part.lower() for part in relative.parts}
         if lowered_parts & self.denied_parts:
             raise PolicyViolation("Access to sensitive repository paths is blocked.")
+        if any(part.startswith(".env") for part in lowered_parts):
+            raise PolicyViolation("Access to environment files is blocked.")
         if candidate.suffix.lower() in DEFAULT_DENIED_SUFFIXES:
             raise PolicyViolation("Access to credential-like files is blocked.")
 
@@ -87,7 +88,10 @@ class ToolPolicy:
         if not args:
             raise PolicyViolation("Invalid command.")
 
-        if not any(tuple(args[: len(prefix)]) == prefix for prefix in self.command_allowlist):
+        allowed = any(
+            tuple(args[: len(prefix)]) == prefix for prefix in self.command_allowlist
+        )
+        if not allowed:
             raise PolicyViolation("Command is not in the verification allowlist.")
 
         return args
