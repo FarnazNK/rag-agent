@@ -85,3 +85,24 @@ def test_harness_blocks_unapproved_tool_for_read_only_run(tmp_path):
 
     assert result.status == "blocked"
     assert (tmp_path / "service.py").read_text(encoding="utf-8") == "value = 1\n"
+
+
+def test_harness_fails_closed_for_unknown_skill(tmp_path):
+    (tmp_path / "service.py").write_text("value = 1\n", encoding="utf-8")
+    planner = ScriptedPlanner(
+        [
+            AgentDecision(
+                tool=AgentTool.FINISH,
+                arguments={"summary": "Should not run."},
+            )
+        ]
+    )
+
+    result = DeveloperAgentHarness(tmp_path, planner=planner).run(
+        "review service",
+        skill_name="missing-skill",
+    )
+
+    assert result.status == "blocked"
+    assert result.skill == "missing-skill"
+    assert "Unknown agent skill" in result.summary
