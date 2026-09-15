@@ -52,6 +52,21 @@ class DeveloperAgentHarness:
         changed_files: set[str] = set()
         skill = self.skills.get(skill_name)
 
+        if skill_name and skill is None:
+            logger.warning(
+                "agent_skill_not_found",
+                run_id=run_id,
+                skill=skill_name,
+            )
+            return AgentRunResult(
+                run_id=run_id,
+                task=task,
+                status="blocked",
+                selected_context=context,
+                summary=f"Unknown agent skill: {skill_name}",
+                skill=skill_name,
+            )
+
         allowed = set(self.registry.names)
         if not self.policy.allow_writes:
             allowed.discard(AgentTool.WRITE_FILE)
