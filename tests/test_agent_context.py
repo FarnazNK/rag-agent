@@ -29,3 +29,23 @@ def test_context_builder_respects_context_budget(tmp_path):
 
     assert sum(len(item.content) for item in context) <= 120
     assert any(item.truncated for item in context)
+
+
+def test_context_builder_excludes_sensitive_files(tmp_path):
+    (tmp_path / "service.py").write_text("api client configuration", encoding="utf-8")
+    (tmp_path / "secrets.yaml").write_text(
+        "api client secret production credential",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env.local").write_text(
+        "API_SECRET=do-not-read",
+        encoding="utf-8",
+    )
+
+    builder = RepositoryContextBuilder(tmp_path)
+    context = builder.build("api client secret credential", limit=10)
+    selected = {item.path for item in context}
+
+    assert "service.py" in selected
+    assert "secrets.yaml" not in selected
+    assert ".env.local" not in selected
