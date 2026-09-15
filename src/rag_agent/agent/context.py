@@ -102,7 +102,11 @@ class RepositoryContextBuilder:
             relative = path.relative_to(self.repo_root)
             if any(part in self.ignored_dirs for part in relative.parts):
                 continue
-            if path.name not in _ALWAYS_TEXT_FILENAMES and path.suffix.lower() not in DEFAULT_TEXT_SUFFIXES:
+            is_supported = (
+                path.name in _ALWAYS_TEXT_FILENAMES
+                or path.suffix.lower() in DEFAULT_TEXT_SUFFIXES
+            )
+            if not is_supported:
                 continue
             try:
                 if path.stat().st_size > self.max_file_bytes:
