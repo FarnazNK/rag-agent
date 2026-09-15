@@ -118,8 +118,7 @@ class RepositoryContextBuilder:
             if path.name.lower().startswith((".env", "secret")):
                 continue
             is_supported = (
-                path.name in _ALWAYS_TEXT_FILENAMES
-                or path.suffix.lower() in DEFAULT_TEXT_SUFFIXES
+                path.name in _ALWAYS_TEXT_FILENAMES or path.suffix.lower() in DEFAULT_TEXT_SUFFIXES
             )
             if not is_supported:
                 continue
