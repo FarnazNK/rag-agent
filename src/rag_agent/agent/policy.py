@@ -77,10 +77,8 @@ def is_sensitive_path(
         return True
     if name.endswith(DEFAULT_DENIED_ENDINGS):
         return True
-    if relative.suffix.lower() in DEFAULT_DENIED_SUFFIXES:
-        return True
 
-    return False
+    return relative.suffix.lower() in DEFAULT_DENIED_SUFFIXES
 
 
 @dataclass(frozen=True)
