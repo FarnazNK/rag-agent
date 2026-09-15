@@ -5,7 +5,8 @@ from pathlib import Path
 
 from rag_agent.agent.models import ContextFile
 
-_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{1,}")
+_RAW_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 DEFAULT_IGNORED_DIRS = frozenset(
     {
@@ -23,6 +24,11 @@ DEFAULT_IGNORED_DIRS = frozenset(
         "node_modules",
         "vendor",
     }
+)
+
+DEFAULT_IGNORED_PATH_PREFIXES = (
+    "benchmarks/results/",
+    "data/agent_evals/",
 )
 
 DEFAULT_SENSITIVE_PARTS = frozenset(
@@ -75,9 +81,50 @@ _ALWAYS_TEXT_FILENAMES = frozenset(
     }
 )
 
+_SOURCE_PREFIXES = (
+    "app/",
+    "lib/",
+    "src/",
+)
+
+
+def _normalize_token(token: str) -> str:
+    token = token.lower()
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    if len(token) > 5 and token.endswith("ing"):
+        return token[:-3]
+    if len(token) > 4 and token.endswith("ed"):
+        return token[:-2]
+    return token
+
 
 def _tokens(value: str) -> set[str]:
-    return {token.lower() for token in _TOKEN_RE.findall(value) if len(token) > 1}
+    expanded = _CAMEL_BOUNDARY_RE.sub(" ", value.replace("_", " "))
+    return {
+        normalized
+        for raw in _RAW_TOKEN_RE.findall(expanded)
+        if len(normalized := _normalize_token(raw)) > 1
+    }
+
+
+def _overlap_count(query_tokens: set[str], candidate_tokens: set[str]) -> float:
+    score = 0.0
+    for query_token in query_tokens:
+        if query_token in candidate_tokens:
+            score += 1.0
+            continue
+        if len(query_token) < 4:
+            continue
+        if any(
+            len(candidate) >= 4
+            and (query_token.startswith(candidate) or candidate.startswith(query_token))
+            for candidate in candidate_tokens
+        ):
+            score += 0.5
+    return score
 
 
 class RepositoryContextBuilder:
@@ -110,8 +157,11 @@ class RepositoryContextBuilder:
             if not path.is_file():
                 continue
             relative = path.relative_to(self.repo_root)
+            relative_posix = relative.as_posix()
             lowered_parts = {part.lower() for part in relative.parts}
             if any(part in self.ignored_dirs for part in relative.parts):
+                continue
+            if any(relative_posix.startswith(prefix) for prefix in DEFAULT_IGNORED_PATH_PREFIXES):
                 continue
             if lowered_parts & DEFAULT_SENSITIVE_PARTS:
                 continue
@@ -150,10 +200,17 @@ class RepositoryContextBuilder:
 
             path_tokens = _tokens(relative.replace("/", " "))
             content_tokens = _tokens(content[:20_000])
-            path_overlap = len(query_tokens & path_tokens)
-            content_overlap = len(query_tokens & content_tokens)
+            path_overlap = _overlap_count(query_tokens, path_tokens)
+            content_overlap = _overlap_count(query_tokens, content_tokens)
 
-            score = float(path_overlap * 4 + content_overlap)
+            score = path_overlap * 4 + content_overlap
+            if relative.startswith(_SOURCE_PREFIXES):
+                score += 2.0
+            elif relative.startswith(("tests/", "test/", "spec/")):
+                score += 0.5
+            elif relative.startswith(("docs/", "data/", "benchmarks/")):
+                score -= 1.0
+
             if path.name.lower() in {"readme.md", "pyproject.toml", "package.json", "gemfile"}:
                 score += 0.25
             if score <= 0:
