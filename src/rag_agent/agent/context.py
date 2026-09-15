@@ -25,6 +25,16 @@ DEFAULT_IGNORED_DIRS = frozenset(
     }
 )
 
+DEFAULT_SENSITIVE_PARTS = frozenset(
+    {
+        ".aws",
+        ".gnupg",
+        ".ssh",
+        "credentials",
+        "secrets",
+    }
+)
+
 DEFAULT_TEXT_SUFFIXES = frozenset(
     {
         ".c",
@@ -100,7 +110,12 @@ class RepositoryContextBuilder:
             if not path.is_file():
                 continue
             relative = path.relative_to(self.repo_root)
+            lowered_parts = {part.lower() for part in relative.parts}
             if any(part in self.ignored_dirs for part in relative.parts):
+                continue
+            if lowered_parts & DEFAULT_SENSITIVE_PARTS:
+                continue
+            if path.name.lower().startswith((".env", "secret")):
                 continue
             is_supported = (
                 path.name in _ALWAYS_TEXT_FILENAMES
