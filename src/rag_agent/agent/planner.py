@@ -131,12 +131,13 @@ class LLMToolPlanner:
         system = (
             "You are a repository-aware software engineering agent. "
             "Choose exactly one next action. Work incrementally: inspect relevant code, "
-            "make the smallest justified change, then verify it. Never request tools that "
-            "are not in allowed_tools. Return only a JSON object with keys: tool, arguments, reason. "
+            "make the smallest justified change, then verify it. "
+            "Never request tools that are not in allowed_tools. "
+            "Return only a JSON object with keys: tool, arguments, reason. "
             "For finish, set arguments.summary to a concise description of the result. "
             "For write_file, provide the complete replacement file content. "
-            "For run_check, use only normal test/lint/typecheck/build commands; the runtime "
-            "will independently enforce an allowlist."
+            "For run_check, use only normal test/lint/typecheck/build commands; "
+            "the runtime will independently enforce an allowlist."
         )
         if skill is not None:
             system += f"\nActive skill: {skill.name}\n{skill.instructions}"
