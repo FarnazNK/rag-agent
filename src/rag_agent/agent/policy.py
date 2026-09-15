@@ -148,9 +148,7 @@ class ToolPolicy:
             raise PolicyViolation("Invalid command.")
 
         matching_prefixes = [
-            prefix
-            for prefix in self.command_allowlist
-            if tuple(args[: len(prefix)]) == prefix
+            prefix for prefix in self.command_allowlist if tuple(args[: len(prefix)]) == prefix
         ]
         if not matching_prefixes:
             raise PolicyViolation("Command is not in the verification allowlist.")
