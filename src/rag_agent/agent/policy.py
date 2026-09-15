@@ -88,9 +88,7 @@ class ToolPolicy:
         if not args:
             raise PolicyViolation("Invalid command.")
 
-        allowed = any(
-            tuple(args[: len(prefix)]) == prefix for prefix in self.command_allowlist
-        )
+        allowed = any(tuple(args[: len(prefix)]) == prefix for prefix in self.command_allowlist)
         if not allowed:
             raise PolicyViolation("Command is not in the verification allowlist.")
 
